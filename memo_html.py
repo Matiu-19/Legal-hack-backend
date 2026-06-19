@@ -54,6 +54,9 @@ body { font-family: var(--fs); font-size: 12px; line-height: 1.75; color: var(--
 .st { font-family: var(--fs); font-size: 13.5px; font-weight: 600; color: var(--n); }
 .sec p { font-size: 12px; color: var(--go); line-height: 1.75; margin-bottom: 8px; }
 .card { background: var(--gc); padding: 18px 22px; border-radius: 3px; display: flex; flex-direction: column; gap: 13px; }
+.nat-banner { background: var(--r); color: #fff; padding: 11px 18px; border-radius: 3px; margin-bottom: 12px; }
+.nat-banner b { font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.nat-banner span { display: block; font-size: 10px; margin-top: 3px; font-style: italic; opacity: .92; }
 .cl { display: block; font-size: 8.5px; color: var(--gm); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 3px; }
 .cv { font-size: 11.5px; color: var(--c); margin: 0; }
 .inv { display: flex; flex-direction: column; gap: 5px; }
@@ -241,6 +244,16 @@ def _regimen_html(reg: dict, fuentes: dict) -> str:
     if not reg or "error" in reg:
         return ""
     nombre = reg.get("etiqueta_legible") or reg.get("regimen") or "—"
+    _NAT = {"subjetiva_culpa_probada": "subjetiva", "subjetiva_culpa_presunta": "subjetiva",
+            "medica": "subjetiva", "actividad_peligrosa": "objetiva",
+            "objetiva_actividad_peligrosa": "objetiva", "objetiva_producto": "objetiva",
+            "seguro_soat": "objetiva"}
+    nat = (reg.get("naturaleza") or _NAT.get(reg.get("regimen", ""), "")).upper()
+    banner = ""
+    if nat:
+        expl = reg.get("naturaleza_explicacion") or ""
+        banner = (f'<div class="nat-banner"><b>Responsabilidad {esc(nat)}</b>'
+                  + (f'<span>{esc(expl)}</span>' if expl else "") + "</div>")
     filas = [("Régimen aplicable", nombre), ("Nivel de confianza", reg.get("nivel_confianza")),
              ("Carga de la prueba", reg.get("carga_de_la_prueba"))]
     if reg.get("diligencia_exonera") is not None:
@@ -256,7 +269,7 @@ def _regimen_html(reg: dict, fuentes: dict) -> str:
     cit = _expand_citas(labels, fuentes)
     if cit:
         cuerpo += f'<div><span class="cl">Fundamento jurídico</span><p class="cv afp">{esc(cit)}</p></div>'
-    return f'<div class="card">{cuerpo}</div>'
+    return f'{banner}<div class="card">{cuerpo}</div>'
 
 
 def _elementos_html(el: dict, fuentes: dict) -> str:

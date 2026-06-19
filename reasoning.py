@@ -232,6 +232,11 @@ def paso1_regimen(hechos: dict[str, Any]) -> dict[str, Any]:
         "Colombia, del lado de la DEFENSA (demandado). Determinas el RÉGIMEN de responsabilidad, "
         "que es la decisión que GOBIERNA todo el análisis (define qué debe probar cada parte).\n\n"
         + _PRINCIPIOS + "\n\n"
+        "DATO CRÍTICO: lo PRIMERO y más importante es decir si la responsabilidad es SUBJETIVA u "
+        "OBJETIVA. Subjetiva = se basa en la culpa (culpa probada art. 2341, culpa presunta, o "
+        "responsabilidad médica por lex artis). Objetiva = no depende de culpa, solo exonera la "
+        "causa extraña (actividad peligrosa art. 2356, producto defectuoso Ley 1480). El SOAT/seguro "
+        "es un régimen especial de cobertura objetiva.\n\n"
         "REGLA DE CONFLICTO: si el caso admite dos regímenes, NO elijas dogmáticamente. Presenta "
         "el principal y el alternativo (el que podría alegar la contraparte o el juez) y marca "
         "`clasificacion_contestable`. El actor suele enmarcar como actividad peligrosa (2356) para "
@@ -246,6 +251,8 @@ def paso1_regimen(hechos: dict[str, Any]) -> dict[str, Any]:
     instruccion = (
         "Determina el RÉGIMEN y devuelve este JSON (campos de la sección 2.1 del estándar):\n"
         "{\n"
+        '  "naturaleza": "subjetiva | objetiva",\n'
+        '  "naturaleza_explicacion": "1 frase: por qué es subjetiva (se prueba culpa) u objetiva (solo causa extraña exonera)",\n'
         '  "regimen": "subjetiva_culpa_probada | subjetiva_culpa_presunta | actividad_peligrosa | '
         'objetiva_producto | medica | seguro_soat | otro",\n'
         '  "etiqueta_legible": "nombre del régimen en lenguaje natural",\n'
@@ -265,8 +272,23 @@ def paso1_regimen(hechos: dict[str, Any]) -> dict[str, Any]:
         "}"
     )
     out = _ejecutar_paso(system, instruccion, hechos, chunks)
+    # Respaldo determinista: garantiza la naturaleza (subjetiva/objetiva) aunque el LLM la omita.
+    if not out.get("naturaleza"):
+        out["naturaleza"] = _NATURALEZA_POR_REGIMEN.get(out.get("regimen", ""), "")
     out["_chunks"] = chunks
     return out
+
+
+# Naturaleza (subjetiva/objetiva) por régimen — criterio de evaluación #1.
+_NATURALEZA_POR_REGIMEN = {
+    "subjetiva_culpa_probada": "subjetiva",
+    "subjetiva_culpa_presunta": "subjetiva",
+    "medica": "subjetiva",
+    "actividad_peligrosa": "objetiva",
+    "objetiva_actividad_peligrosa": "objetiva",
+    "objetiva_producto": "objetiva",
+    "seguro_soat": "objetiva",
+}
 
 
 # --- Paso 2: Nexo causal y exoneración --------------------------------------
@@ -571,6 +593,9 @@ def _render_regimen(reg: dict[str, Any], registro: dict[str, dict[str, Any]]) ->
         return []
     nombre = reg.get("etiqueta_legible") or reg.get("regimen") or "no determinado"
     L = ["## 2.1 Régimen de responsabilidad", ""]
+    nat = (reg.get("naturaleza") or "").upper()
+    if nat:
+        L.append(f"**Naturaleza:** {nat}" + (f" — {reg['naturaleza_explicacion']}" if reg.get("naturaleza_explicacion") else ""))
     conf = reg.get("nivel_confianza")
     L.append(f"**Régimen aplicable:** {nombre}" + (f"  ·  confianza: {conf}" if conf else ""))
     if reg.get("carga_de_la_prueba"):
