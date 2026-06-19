@@ -33,8 +33,9 @@ jobs:
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --allow-unauthenticated \
-            --memory 2Gi \
-            --cpu 1 \
+            --memory 4Gi \
+            --cpu 2 \
+            --min-instances 1 \
             --use-http2 \
             --timeout 600 \
             --set-env-vars GOOGLE_CLOUD_PROJECT="$PROJECT_ID",GCS_BUCKET="$GCS_BUCKET"

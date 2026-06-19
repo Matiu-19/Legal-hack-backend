@@ -60,16 +60,24 @@ def _warmup_indice() -> None:
 
 @app.get("/rag-status")
 def rag_status() -> dict[str, Any]:
-    """Diagnóstico: ¿está el índice cargado y con cuántos chunks por categoría?"""
+    """
+    Diagnóstico: fuerza la descarga del índice (si falta) y reporta el estado.
+    Si la descarga falla, devuelve el error exacto en la respuesta HTTP.
+    La primera llamada puede tardar ~20-30s mientras baja los 266 MB.
+    """
+    import rag
     try:
-        import rag
-        existe = os.path.isdir(rag.DB_PATH)
-        if not existe:
-            return {"indice_en_disco": False, "mensaje": "aún descargando o no disponible"}
+        rag.asegurar_indice()
+    except Exception as e:
+        return {"indice_en_disco": os.path.isdir(rag.DB_PATH),
+                "error_descarga": f"{type(e).__name__}: {e}"}
+    try:
+        if not os.path.isdir(rag.DB_PATH):
+            return {"indice_en_disco": False, "mensaje": "no disponible tras intento de descarga"}
         conteo = rag.listar()
         return {"indice_en_disco": True, "total": sum(conteo.values()), "por_categoria": conteo}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"{type(e).__name__}: {e}"}
 
 
 @app.get("/health")

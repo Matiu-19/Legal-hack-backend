@@ -374,22 +374,18 @@ def descargar_indice(force: bool = False) -> bool:
 
     if os.path.isdir(DB_PATH) and not force:
         return True
-    try:
-        client = storage.Client()
-        blob = client.bucket(GCS_BUCKET).blob(GCS_INDEX_OBJECT)
-        if not blob.exists():
-            print(f"[rag] No hay índice en gs://{GCS_BUCKET}/{GCS_INDEX_OBJECT}.")
-            return False
-        tmp = os.path.join(tempfile.gettempdir(), "chromadb-index.tar.gz")
-        blob.download_to_filename(tmp)
-        with tarfile.open(tmp, "r:gz") as tar:
-            tar.extractall(os.path.dirname(DB_PATH))
-        os.remove(tmp)
-        print(f"[rag] Índice descargado de GCS.")
-        return True
-    except Exception as e:
-        print(f"[rag] No se pudo descargar el índice: {e}")
-        return False
+    client = storage.Client()
+    blob = client.bucket(GCS_BUCKET).blob(GCS_INDEX_OBJECT)
+    if not blob.exists():
+        raise RuntimeError(f"No existe gs://{GCS_BUCKET}/{GCS_INDEX_OBJECT}")
+    print(f"[rag] Descargando índice de gs://{GCS_BUCKET}/{GCS_INDEX_OBJECT} ...")
+    tmp = os.path.join(tempfile.gettempdir(), "chromadb-index.tar.gz")
+    blob.download_to_filename(tmp)
+    with tarfile.open(tmp, "r:gz") as tar:
+        tar.extractall(os.path.dirname(DB_PATH))
+    os.remove(tmp)
+    print(f"[rag] Índice descargado y descomprimido.")
+    return True
 
 
 # --- CLI ---------------------------------------------------------------------
