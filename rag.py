@@ -303,12 +303,17 @@ def consultar_multi(query: str, n_por_categoria: int = 3) -> dict[str, list[dict
 
 
 def listar() -> dict[str, int]:
+    """Cuenta chunks por categoría. Pagina para no exceder el límite de variables
+    de SQLite (traer ~35k metadatos de golpe revienta el backend)."""
     col = _get_col()
-    todos = col.get(include=["metadatas"])
     conteo: dict[str, int] = {c: 0 for c in CATEGORIAS}
-    for meta in todos["metadatas"]:
-        cat = meta.get("categoria", "?")
-        conteo[cat] = conteo.get(cat, 0) + 1
+    total = col.count()
+    paso = 5000
+    for off in range(0, total, paso):
+        batch = col.get(include=["metadatas"], limit=paso, offset=off)
+        for meta in batch["metadatas"]:
+            cat = meta.get("categoria", "?")
+            conteo[cat] = conteo.get(cat, 0) + 1
     return conteo
 
 
