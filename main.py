@@ -85,19 +85,58 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/analizar")
-async def analizar(files: list[UploadFile] = File(...)) -> dict[str, Any]:
-    """Recibe archivos de cualquier tamaño y devuelve los hechos estructurados."""
-    tmpdir = tempfile.mkdtemp(prefix="rce_")
-    saved: list[str] = []
-    try:
-        for uf in files:
-            dest = os.path.join(tmpdir, Path(uf.filename or "archivo").name)
-            with open(dest, "wb") as out:
-                shutil.copyfileobj(uf.file, out)
-            saved.append(dest)
+CATEGORIAS = ("demanda", "pruebas", "anexos", "poderes")
 
-        blocks = normalize_many(saved)
+
+def _guardar_categoria(uploads: list[UploadFile], tmpdir: str, categoria: str) -> list[str]:
+    subdir = os.path.join(tmpdir, categoria)
+    os.makedirs(subdir, exist_ok=True)
+    saved: list[str] = []
+    for uf in uploads:
+        dest = os.path.join(subdir, Path(uf.filename or "archivo").name)
+        with open(dest, "wb") as out:
+            shutil.copyfileobj(uf.file, out)
+        saved.append(dest)
+    return saved
+
+
+def _categoria_marker(categoria: str) -> dict[str, Any]:
+    return {"type": "text", "text": f"\n=== CATEGORÍA: {categoria.upper()} ===\n"}
+
+
+@app.post("/analizar")
+async def analizar(
+    demanda: list[UploadFile] = File(...),
+    pruebas: list[UploadFile] | None = File(None),
+    anexos: list[UploadFile] | None = File(None),
+    poderes: list[UploadFile] | None = File(None),
+) -> dict[str, Any]:
+    """
+    Recibe archivos de cualquier tamaño organizados en 4 categorías y devuelve
+    los hechos estructurados + la cadena de razonamiento jurídica. La categoría
+    se inyecta como marcador de texto en el prompt para que el LLM distinga el
+    rol de cada documento (demanda principal vs. material probatorio, etc.).
+    """
+    tmpdir = tempfile.mkdtemp(prefix="rce_")
+    grupos: dict[str, list[UploadFile]] = {
+        "demanda": demanda,
+        "pruebas": pruebas or [],
+        "anexos": anexos or [],
+        "poderes": poderes or [],
+    }
+    try:
+        archivos_por_categoria: dict[str, list[str]] = {}
+        blocks: list[dict[str, Any]] = []
+        for cat in CATEGORIAS:
+            ups = grupos[cat]
+            if not ups:
+                archivos_por_categoria[cat] = []
+                continue
+            paths = _guardar_categoria(ups, tmpdir, cat)
+            archivos_por_categoria[cat] = [Path(p).name for p in paths]
+            blocks.append(_categoria_marker(cat))
+            blocks.extend(normalize_many(paths))
+
         hechos = extraer_hechos(blocks)
 
         # === Cadena de razonamiento jurídica =================================
@@ -111,9 +150,13 @@ async def analizar(files: list[UploadFile] = File(...)) -> dict[str, Any]:
                 analisis = {"error": f"falló el razonamiento: {e}"}
         # ====================================================================
 
+        archivos_flat = [
+            nombre for cat in CATEGORIAS for nombre in archivos_por_categoria[cat]
+        ]
         return {
             "ok": "error" not in hechos,
-            "archivos": [Path(s).name for s in saved],
+            "archivos": archivos_flat,
+            "archivos_por_categoria": archivos_por_categoria,
             "hechos": hechos,
             "analisis": analisis,
             "memo": (analisis or {}).get("memo_markdown") if isinstance(analisis, dict) else None,
