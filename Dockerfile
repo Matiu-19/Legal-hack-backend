@@ -13,6 +13,10 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Chromium para renderizar los PDFs premium (HTML -> PDF con Playwright).
+# --with-deps instala las librerías de sistema que Chromium necesita.
+RUN python -m playwright install --with-deps chromium
+
 COPY . .
 
 EXPOSE 8000

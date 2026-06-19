@@ -33,6 +33,7 @@ memorando.pdf
 hechos_*.json
 memo_*.json
 memo_*.md
+*_premium.html
 
 # IDEs
 .vscode/

@@ -23,7 +23,7 @@ from typing import Any
 
 from fastapi import Body, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 
 from ingest import normalize_many
 from comprehension import extraer_hechos
@@ -86,26 +86,51 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# --- Descarga de PDFs --------------------------------------------------------
-@app.post("/pdf/hechos")
-def pdf_hechos_endpoint(hechos: dict[str, Any] = Body(...)) -> Response:
-    """Genera la Ficha del caso (croquis) en PDF a partir del objeto `hechos`."""
-    from documents import pdf_hechos
-    data = pdf_hechos(hechos)
-    return Response(
-        content=data, media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="ficha_caso.pdf"'},
-    )
+# --- Render HTML premium (plantilla Hurtado Gandini) -------------------------
+# El front muestra este HTML y el usuario descarga con Ctrl+P -> Guardar como PDF
+# (fidelidad perfecta: Playfair, logo SVG, acentos institucionales).
+@app.post("/memo/html", response_class=HTMLResponse)
+def memo_html_endpoint(payload: dict[str, Any] = Body(...)) -> HTMLResponse:
+    """Recibe {analisis, hechos} (o el objeto analisis directo) y devuelve el memorando en HTML premium."""
+    from memo_html import render_memo_html
+    analisis = payload.get("analisis") or payload
+    hechos = payload.get("hechos") or {}
+    return HTMLResponse(content=render_memo_html(analisis, hechos))
 
 
+@app.post("/ficha/html", response_class=HTMLResponse)
+def ficha_html_endpoint(hechos: dict[str, Any] = Body(...)) -> HTMLResponse:
+    """Recibe el objeto `hechos` y devuelve la Ficha del caso en HTML premium."""
+    from memo_html import render_ficha_html
+    return HTMLResponse(content=render_ficha_html(hechos))
+
+
+# --- Descarga de PDFs (diseño premium HG, renderizado con Chromium) ----------
+# Importante: endpoints SÍNCRONOS (def, no async) porque la API de Playwright es
+# síncrona y FastAPI los corre en un threadpool sin event loop.
 @app.post("/pdf/memo")
-def pdf_memo_endpoint(analisis: dict[str, Any] = Body(...)) -> Response:
-    """Genera el Memorando de estrategia en PDF a partir del objeto `analisis`."""
-    from documents import pdf_memo
-    data = pdf_memo(analisis)
+def pdf_memo_endpoint(payload: dict[str, Any] = Body(...)) -> Response:
+    """Memorando en PDF premium. Body: {analisis, hechos} (o el analisis directo)."""
+    from memo_html import render_memo_html
+    from pdf_render import html_to_pdf
+    analisis = payload.get("analisis") or payload
+    hechos = payload.get("hechos") or {}
+    data = html_to_pdf(render_memo_html(analisis, hechos))
     return Response(
         content=data, media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="memorando.pdf"'},
+    )
+
+
+@app.post("/pdf/hechos")
+def pdf_hechos_endpoint(hechos: dict[str, Any] = Body(...)) -> Response:
+    """Ficha del caso en PDF premium a partir del objeto `hechos`."""
+    from memo_html import render_ficha_html
+    from pdf_render import html_to_pdf
+    data = html_to_pdf(render_ficha_html(hechos))
+    return Response(
+        content=data, media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="ficha_caso.pdf"'},
     )
 
 
