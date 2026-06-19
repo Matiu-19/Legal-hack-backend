@@ -31,7 +31,7 @@ _LOGO = """<svg width="200" height="72" viewBox="0 0 220 80" xmlns="http://www.w
 # --- CSS de la spec ----------------------------------------------------------
 _CSS = """@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-@page { size: Letter; margin: 22mm 25mm 20mm 25mm; }
+@page { size: Letter; margin: 15mm 16mm; }
 :root {
   --n: #1A1A1A; --c: #2D2D2D; --go: #4A4A4A; --gm: #7A7A7A;
   --gc: #F4F4F4; --gb: #E0E0E0; --w: #FFFFFF; --r: #C0001E;
@@ -133,7 +133,15 @@ body { font-family: var(--fs); font-size: 12px; line-height: 1.75; color: var(--
 .ffirma { font-weight: 700; }
 .ffirma::after { content: '·'; color: var(--r); margin: 0 5px; }
 .fav { font-style: italic; }
-@media print { body { padding: 0; max-width: 100%; } .arg, .sec { break-inside: avoid; } }"""
+@media print {
+  body { padding: 0; max-width: 100%; }
+  /* en PDF, los márgenes los da @page: el .memo va a ancho completo sin padding */
+  .memo { max-width: 100%; padding: 0; margin: 0; }
+  /* no partir unidades atómicas a mitad de página */
+  .card, .arg, .mrow, .prow, .ai, .paso, .fg, .alerta-doc, .ind, .conc, .meta { break-inside: avoid; }
+  /* el título de sección no se queda solo al final de una página */
+  .shdr, .st { break-after: avoid; }
+}"""
 
 
 # --- helpers -----------------------------------------------------------------

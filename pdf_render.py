@@ -19,6 +19,7 @@ def html_to_pdf(html: str) -> bytes:
         browser = p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
         try:
             page = browser.new_page()
+            page.emulate_media(media="print")   # aplica las reglas @media print del CSS
             page.set_content(html, wait_until="networkidle")
             # Asegurar que las webfonts (Playfair / Source Sans) terminen de cargar.
             try:
