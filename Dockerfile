@@ -14,5 +14,6 @@ COPY . .
 
 EXPOSE 8000
 
-# Render inyecta $PORT en tiempo de ejecución
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Hypercorn habla HTTP/2 cleartext (h2c) — necesario para que Cloud Run con
+# --use-http2 acepte requests > 32 MB. uvicorn no soporta HTTP/2.
+CMD ["sh", "-c", "hypercorn main:app --bind 0.0.0.0:${PORT:-8000}"]

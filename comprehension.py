@@ -87,11 +87,17 @@ def _get_client() -> genai.Client:
     global _client
     if _client is None:
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if not api_key:
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCLOUD_PROJECT")
+        if project:
+            # Vertex AI — usa credenciales GCP (automático en Cloud Run)
+            _client = genai.Client(vertexai=True, project=project, location="us-central1")
+        elif api_key:
+            # AI Studio — desarrollo local
+            _client = genai.Client(api_key=api_key)
+        else:
             raise RuntimeError(
-                "Falta la variable de entorno GOOGLE_API_KEY (o GEMINI_API_KEY)."
+                "Define GOOGLE_CLOUD_PROJECT (Vertex AI) o GEMINI_API_KEY (AI Studio)."
             )
-        _client = genai.Client(api_key=api_key)
     return _client
 
 

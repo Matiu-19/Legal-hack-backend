@@ -45,9 +45,13 @@ def _get_gemini():
     if _gemini_client is None:
         from google import genai as _genai
         api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise RuntimeError("Falta GEMINI_API_KEY en el entorno.")
-        _gemini_client = _genai.Client(api_key=api_key)
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCLOUD_PROJECT")
+        if project:
+            _gemini_client = _genai.Client(vertexai=True, project=project, location="us-central1")
+        elif api_key:
+            _gemini_client = _genai.Client(api_key=api_key)
+        else:
+            raise RuntimeError("Define GOOGLE_CLOUD_PROJECT (Vertex AI) o GEMINI_API_KEY (AI Studio).")
     return _gemini_client
 
 

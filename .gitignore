@@ -6,6 +6,9 @@ env/
 # Variables de entorno y secretos
 .env
 .env.*
+key.json
+*-key.json
+gcp-key.json
 
 # Base de datos ChromaDB (índice RAG local)
 .chromadb/

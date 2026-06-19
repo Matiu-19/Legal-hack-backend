@@ -6,7 +6,12 @@ devuelve los hechos jurídicos estructurados. Aquí queda el hook donde se
 conectará la cadena de razonamiento jurídica (régimen -> exoneración ->
 perjuicio -> terceros -> memo) cuando los abogados la tengan lista.
 
-Correr:  uvicorn main:app --reload --port 8000
+Sin límite de 32 MB: el contenedor corre con hypercorn (HTTP/2 cleartext) y el
+servicio de Cloud Run está desplegado con --use-http2, lo que elimina el tope de
+tamaño de request del proxy. El cliente sube el archivo directo, sin pasos extra.
+
+Correr en local:  hypercorn main:app --bind 0.0.0.0:8000
+(uvicorn también sirve en local; solo no soporta HTTP/2 para archivos grandes)
 """
 from __future__ import annotations
 
@@ -22,15 +27,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from ingest import normalize_many
 from comprehension import extraer_hechos
 
-app = FastAPI(title="Reto 2 RCE — Capa de lectura")
+app = FastAPI(title="Reto 2 RCE — Análisis de demandas")
 
-# CORS abierto al front de Next.js en local.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", "http://127.0.0.1:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -43,6 +44,7 @@ def health() -> dict[str, str]:
 
 @app.post("/analizar")
 async def analizar(files: list[UploadFile] = File(...)) -> dict[str, Any]:
+    """Recibe archivos de cualquier tamaño y devuelve los hechos estructurados."""
     tmpdir = tempfile.mkdtemp(prefix="rce_")
     saved: list[str] = []
     try:
