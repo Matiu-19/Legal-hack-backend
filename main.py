@@ -37,6 +37,16 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def _cargar_indice() -> None:
+    """En Cloud Run (sin disco persistente) descarga el índice RAG de GCS."""
+    try:
+        import rag
+        rag.descargar_indice()
+    except Exception as e:
+        print(f"[startup] Índice RAG no disponible: {e}")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -57,17 +67,23 @@ async def analizar(files: list[UploadFile] = File(...)) -> dict[str, Any]:
         blocks = normalize_many(saved)
         hechos = extraer_hechos(blocks)
 
-        # === HOOK: cadena de razonamiento jurídica ===========================
+        # === Cadena de razonamiento jurídica =================================
         # régimen -> exoneración -> perjuicio -> terceros -> memo
-        # La lectura ya entrega `hechos` estructurado y con fuentes.
-        # memo = construir_memo(hechos)
-        # =====================================================================
+        analisis = None
+        if "error" not in hechos:
+            try:
+                from reasoning import construir_memo
+                analisis = construir_memo(hechos)
+            except Exception as e:
+                analisis = {"error": f"falló el razonamiento: {e}"}
+        # ====================================================================
 
         return {
             "ok": "error" not in hechos,
             "archivos": [Path(s).name for s in saved],
             "hechos": hechos,
-            "memo": None,  # se llenará al conectar la cadena
+            "analisis": analisis,
+            "memo": (analisis or {}).get("memo_markdown") if isinstance(analisis, dict) else None,
         }
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

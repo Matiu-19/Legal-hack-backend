@@ -10,8 +10,11 @@ key.json
 *-key.json
 gcp-key.json
 
-# Base de datos ChromaDB (índice RAG local)
+# Base de datos ChromaDB (índice RAG local) — se distribuye vía GCS
 .chromadb/
+
+# Datos de idioma de Tesseract (se descargan aparte, ~15MB)
+tessdata/
 
 # Python
 __pycache__/
