@@ -252,6 +252,10 @@ Valencia Zea, Suescún (R. civil/obligaciones).
 7. **Front Next.js** — render de Módulo 1 (inventario, matriz, semáforo,
    click-to-source) + memo.
 
+8. **`POST /ingerir`** — endpoint para subir documentos al RAG en vivo después
+   del deploy en Render (no hay disco persistente en el tier gratuito; la BD
+   ChromaDB se pierde en cada redeploy). Parámetros: `file` + `categoria`.
+
 **Demo:** 1-2 casos de punta a punta (**producto o actividad peligrosa** lucen
 mejor). Mostrar la **cadena visible** (razonamiento paso a paso) y el
 **click-to-source** de las citas. Eso es lo que vende al jurado técnico.
