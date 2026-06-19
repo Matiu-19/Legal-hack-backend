@@ -38,13 +38,38 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def _cargar_indice() -> None:
-    """En Cloud Run (sin disco persistente) descarga el índice RAG de GCS."""
+def _warmup_indice() -> None:
+    """
+    Dispara la descarga del índice RAG en un hilo aparte para NO bloquear el
+    arranque (Cloud Run mata el contenedor si el startup tarda demasiado). El
+    índice queda listo en segundos; si llega una consulta antes, asegurar_indice()
+    la hace esperar con lock.
+    """
+    import threading
+
+    def _bajar():
+        try:
+            import rag
+            rag.asegurar_indice()
+            print("[startup] Índice RAG listo.")
+        except Exception as e:
+            print(f"[startup] Índice RAG no disponible: {e}")
+
+    threading.Thread(target=_bajar, daemon=True).start()
+
+
+@app.get("/rag-status")
+def rag_status() -> dict[str, Any]:
+    """Diagnóstico: ¿está el índice cargado y con cuántos chunks por categoría?"""
     try:
         import rag
-        rag.descargar_indice()
+        existe = os.path.isdir(rag.DB_PATH)
+        if not existe:
+            return {"indice_en_disco": False, "mensaje": "aún descargando o no disponible"}
+        conteo = rag.listar()
+        return {"indice_en_disco": True, "total": sum(conteo.values()), "por_categoria": conteo}
     except Exception as e:
-        print(f"[startup] Índice RAG no disponible: {e}")
+        return {"error": str(e)}
 
 
 @app.get("/health")

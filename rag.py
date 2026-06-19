@@ -142,12 +142,36 @@ def _embed(texts: list[str]) -> list[list[float]]:
 
 
 # --- Singleton de colección --------------------------------------------------
+import threading
+
 _col: chromadb.Collection | None = None
+_index_lock = threading.Lock()
+_index_listo = False
+
+
+def asegurar_indice() -> None:
+    """
+    Garantiza que el índice esté en disco antes de abrirlo. En Cloud Run (sin
+    disco persistente) lo descarga de GCS una sola vez, protegido por lock para
+    que peticiones concurrentes no disparen descargas en paralelo. En local, si
+    ya existe .chromadb, no hace nada.
+    """
+    global _index_listo
+    if _index_listo or os.path.isdir(DB_PATH):
+        _index_listo = True
+        return
+    with _index_lock:
+        if _index_listo or os.path.isdir(DB_PATH):
+            _index_listo = True
+            return
+        descargar_indice()
+        _index_listo = True
 
 
 def _get_col() -> chromadb.Collection:
     global _col
     if _col is None:
+        asegurar_indice()
         client = chromadb.PersistentClient(path=DB_PATH)
         _col = client.get_or_create_collection(
             name=COLLECTION,
