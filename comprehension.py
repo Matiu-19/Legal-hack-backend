@@ -123,7 +123,7 @@ def _parse_json(text: str) -> dict[str, Any]:
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end != -1:
         text = text[start:end + 1]
-    return json.loads(text)
+    return json.loads(text, strict=False)   # tolera saltos de línea en strings
 
 
 def extraer_hechos(blocks: list[dict[str, Any]]) -> dict[str, Any]:

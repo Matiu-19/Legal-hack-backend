@@ -71,33 +71,60 @@ def _source_marker(name: str) -> dict[str, Any]:
 
 
 # --- Bloques por tipo -------------------------------------------------------
-MAX_PDF_PAGES = 30   # tope de páginas para no exceder contexto
-PDF_DPI = 120        # resolución suficiente para OCR, sin exceder tamaño
+PDF_DPI         = 120   # resolución de render para páginas escaneadas
+TEXT_MIN_CHARS  = 100   # una página con menos texto que esto se trata como escaneada
+MAX_TEXT_PAGES  = 60    # tope de páginas digitales (texto = barato, se permiten muchas)
+MAX_IMAGE_PAGES = 25    # tope de páginas escaneadas (imagen = caro en tokens)
+
+
+def _muestrear(indices: list[int], tope: int) -> set[int]:
+    """Muestreo uniforme de una lista de índices si supera el tope."""
+    if len(indices) <= tope:
+        return set(indices)
+    step = len(indices) / tope
+    return {indices[int(k * step)] for k in range(tope)}
 
 
 def pdf_blocks(path: str) -> list[dict[str, Any]]:
-    """Convierte cada página del PDF en un bloque de imagen (funciona con PDFs escaneados y digitales)."""
+    """
+    Convierte un PDF en bloques, optimizando costo/precisión:
+    - Página con capa de texto  -> bloque de TEXTO (barato, sin ruido de OCR).
+    - Página escaneada (sin texto) -> bloque de IMAGEN (Gemini la lee nativo).
+    Mantiene el orden del documento y aplica topes separados por tipo.
+    """
     import fitz  # PyMuPDF
-    blocks: list[dict[str, Any]] = []
     doc = fitz.open(path)
-    total = len(doc)
-    pages = list(range(min(total, MAX_PDF_PAGES)))
-    if total > MAX_PDF_PAGES:
-        # muestreo uniforme si hay más páginas del tope
-        step = total / MAX_PDF_PAGES
-        pages = [int(i * step) for i in range(MAX_PDF_PAGES)]
+    n = len(doc)
+
+    # Clasificar cada página: digital (con texto) vs escaneada.
+    texto_por_pagina: dict[int, str] = {}
+    paginas_escaneadas: list[int] = []
+    for i in range(n):
+        t = doc[i].get_text("text").strip()
+        if len(t) >= TEXT_MIN_CHARS:
+            texto_por_pagina[i] = t
+        else:
+            paginas_escaneadas.append(i)
+
+    keep_texto = _muestrear(sorted(texto_por_pagina), MAX_TEXT_PAGES)
+    keep_imagen = _muestrear(paginas_escaneadas, MAX_IMAGE_PAGES)
+
+    blocks: list[dict[str, Any]] = []
     mat = fitz.Matrix(PDF_DPI / 72, PDF_DPI / 72)
-    for i in pages:
-        pix = doc[i].get_pixmap(matrix=mat, alpha=False)
-        png_bytes = pix.tobytes("png")
-        blocks.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/png",
-                "data": _b64(png_bytes),
-            },
-        })
+    for i in range(n):
+        if i in keep_texto:
+            blocks.append({"type": "text",
+                           "text": f"[Página {i + 1}]\n{texto_por_pagina[i]}"})
+        elif i in keep_imagen:
+            pix = doc[i].get_pixmap(matrix=mat, alpha=False)
+            blocks.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": _b64(pix.tobytes("png")),
+                },
+            })
     doc.close()
     return blocks
 

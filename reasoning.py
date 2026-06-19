@@ -137,19 +137,24 @@ def _registro_citas(chunks: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 # --- Llamada al modelo -------------------------------------------------------
-def _llm(system: str, user: str, model: str = REASONING_MODEL, max_tokens: int = 3500) -> str:
+def _llm(system: str, user: str, model: str = REASONING_MODEL, max_tokens: int = 6000) -> str:
     from google.genai import types
     client = rag._get_gemini()
-    resp = client.models.generate_content(
-        model=model,
-        contents=[user],
-        config=types.GenerateContentConfig(
-            system_instruction=system,
-            max_output_tokens=max_tokens,
-            temperature=0.2,
-        ),
+    cfg: dict[str, Any] = dict(
+        system_instruction=system,
+        max_output_tokens=max_tokens,
+        temperature=0.2,
     )
-    return resp.text
+    # Desactivar "thinking" de gemini-2.5: si no, consume el presupuesto de
+    # salida y trunca el JSON. Para extracción estructurada no lo necesitamos.
+    try:
+        cfg["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    except Exception:
+        pass
+    resp = client.models.generate_content(
+        model=model, contents=[user], config=types.GenerateContentConfig(**cfg)
+    )
+    return resp.text or ""
 
 
 _REGLA_CITAS = (
@@ -169,11 +174,12 @@ def _ejecutar_paso(system: str, instruccion: str, hechos: dict[str, Any],
         f"MATERIAL JURÍDICO RECUPERADO:\n{contexto}\n\n"
         f"{instruccion}\n\n{_REGLA_CITAS}"
     )
+    raw = ""
     try:
         raw = _llm(system, user)
         return _parse_json(raw)
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": str(e), "raw": raw[:600]}
 
 
 # --- Paso 1: Régimen ---------------------------------------------------------
@@ -241,27 +247,50 @@ def paso2_exoneracion(hechos: dict[str, Any], regimen: dict[str, Any]) -> dict[s
 
 # --- Paso 3: Cuestionamiento del perjuicio ----------------------------------
 def paso3_perjuicio(hechos: dict[str, Any]) -> dict[str, Any]:
-    q = _query_base(hechos) + " cuantía perjuicio daño emergente lucro cesante daño moral " \
-        "soporte probatorio topes indemnización prueba del daño"
-    chunks = recuperar(q, ["jurisprudencia", "perjuicios"], hechos)
+    q = _query_base(hechos) + (
+        " cuantía y tasación del perjuicio · daño emergente prueba documental · "
+        "lucro cesante prueba de ingresos tablas de mortalidad valor presente · "
+        "daño moral topes jurisprudenciales CSJ en SMLMV · daño a la vida de relación · "
+        "daño a la salud · juramento estimatorio art 206 CGP · carga de la prueba art 167 CGP · "
+        "reducción del monto indemnizatorio"
+    )
+    # Cargamos más de 'perjuicios' (corpus especializado) y jurisprudencia.
+    chunks = recuperar(q, ["perjuicios", "jurisprudencia"], hechos, n_prio=5, n_general=4)
     system = (
-        "Eres un abogado de la DEFENSA en RCE en Colombia. Atacas la estimación del "
-        "perjuicio rubro por rubro: verificas soporte probatorio y propones pruebas de descargo."
+        "Eres un abogado de la DEFENSA experto en TASACIÓN y REDUCCIÓN de perjuicios en "
+        "responsabilidad civil en Colombia. Tu trabajo es impugnar, rubro por rubro, la "
+        "estimación del daño con argumentos CONCRETOS, cuantificados cuando se pueda y con "
+        "fundamento normativo/jurisprudencial. Dominas y aplicas:\n"
+        "- Carga de la prueba del quantum (art. 167 CGP): probar el monto es del demandante.\n"
+        "- Juramento estimatorio (art. 206 CGP): si la estimación es objetada y no se prueba, "
+        "o si hay sobreestimación, procede su objeción y eventual sanción.\n"
+        "- Daño emergente: exige prueba DOCUMENTAL (facturas, recibos); sin ella, no se acredita.\n"
+        "- Lucro cesante: exige prueba de ingresos reales + cálculo con tablas de mortalidad / "
+        "vida probable + traída a VALOR PRESENTE; ataca proyecciones especulativas.\n"
+        "- Daño moral: la CSJ fija TOPES en SMLMV; ataca lo que exceda el tope y la falta de "
+        "prueba de la afectación.\n"
+        "- Daño a la vida de relación y daño a la salud: exigen prueba ESPECÍFICA y concreta de "
+        "la afectación, no presunciones."
     )
     instruccion = (
-        "Analiza la CUANTÍA reclamada y, rubro por rubro, devuelve este JSON:\n"
+        "Impugna la estimación del perjuicio. Si la demanda NO cuantifica o no aporta soporte, "
+        "conviértelo en un ataque concreto: exigir cuantificación y prueba conforme a los arts. "
+        "167 y 206 CGP. Devuelve este JSON:\n"
         "{\n"
         '  "rubros": [\n'
         '    {"rubro":"dano_emergente | lucro_cesante | dano_moral | dano_vida_relacion | dano_salud | otro",\n'
         '     "monto_reclamado":"texto o null",\n'
-        '     "soportado":"si | parcial | no",\n'
-        '     "debilidad":"por qué el soporte es insuficiente o especulativo",\n'
-        '     "ataque":"argumento concreto de la defensa",\n'
-        '     "pruebas_de_descargo":["pruebas que la defensa debería solicitar"],\n'
-        '     "citas":["J1","P1"]}\n'
+        '     "soportado":"si | parcial | no | no_cuantificado",\n'
+        '     "estandar_probatorio":"qué exige la ley/jurisprudencia para acreditar ESTE rubro",\n'
+        '     "deficiencia":"qué le falta concretamente a la estimación del demandante",\n'
+        '     "ataque":"argumento concreto de la defensa (cuantificado si es posible)",\n'
+        '     "herramienta_procesal":"p.ej. objetar el juramento estimatorio (206 CGP), exigir prueba (167), pedir perito contable",\n'
+        '     "pruebas_de_descargo":["pruebas que la defensa debe solicitar"],\n'
+        '     "citas":["P1","J2"]}\n'
         "  ],\n"
-        '  "observacion_juramento_estimatorio":"si aplica art. 206 CGP, nota; si no, null",\n'
-        '  "citas":["J1"]\n'
+        '  "objecion_juramento_estimatorio":"si hay estimación juramentada sobreestimada o sin prueba, fundamenta la objeción (206 CGP) y la posible sanción; si no aplica, null",\n'
+        '  "recordatorio_carga_prueba":"nota sobre art. 167 CGP: el quantum lo prueba el demandante",\n'
+        '  "citas":["P1","J2"]\n'
         "}"
     )
     out = _ejecutar_paso(system, instruccion, hechos, chunks)
