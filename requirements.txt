@@ -1,0 +1,8 @@
+google-genai>=1.0
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+pymupdf>=1.23
+chromadb>=0.5
+# Opcional para transcripción de audio/video:
+faster-whisper>=1.0
