@@ -235,6 +235,7 @@ def pdf_memo(analisis: dict[str, Any]) -> bytes:
 
     for raw in md.split("\n"):
         linea = raw.rstrip()
+        pdf.set_x(pdf.l_margin)          # cada línea arranca en el margen izquierdo
         if not linea.strip():
             pdf.ln(2)
             continue

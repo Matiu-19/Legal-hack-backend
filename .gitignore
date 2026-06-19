@@ -32,6 +32,7 @@ ficha_caso.pdf
 memorando.pdf
 hechos_*.json
 memo_*.json
+memo_*.md
 
 # IDEs
 .vscode/
