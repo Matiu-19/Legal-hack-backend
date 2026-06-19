@@ -157,6 +157,19 @@ def _llm(system: str, user: str, model: str = REASONING_MODEL, max_tokens: int =
     return resp.text or ""
 
 
+# Principios irrenunciables (de la spec jurídica del equipo de abogados).
+_PRINCIPIOS = (
+    "PRINCIPIOS IRRENUNCIABLES:\n"
+    "1) Sin fuente no hay afirmación: toda conclusión jurídica se apoya en una fuente "
+    "verificable del material (norma/jurisprudencia/doctrina) y en hechos del expediente.\n"
+    "2) Nunca inventes: ni normas, ni números de sentencia, ni datos, ni cuantías. Si un "
+    "dato fáctico no está en los hechos, escríbelo como [DATO PENDIENTE DE VERIFICACIÓN]; "
+    "si no hay respaldo jurídico en el material, dilo y déjalo para revisión del abogado.\n"
+    "3) Todo es PRELIMINAR y requiere validación humana. NO predices el resultado del proceso "
+    "ni afirmas que una prueba 'es válida' o que el demandado 'perderá'.\n"
+    "4) El abogado decide; tú organizas, analizas y recomiendas."
+)
+
 _REGLA_CITAS = (
     "Cita ÚNICAMENTE con las etiquetas [X#] del MATERIAL JURÍDICO de abajo "
     "(p. ej. [J1], [L2]). NUNCA inventes números de sentencia ni de artículo. "
@@ -184,28 +197,47 @@ def _ejecutar_paso(system: str, instruccion: str, hechos: dict[str, Any],
 
 # --- Paso 1: Régimen ---------------------------------------------------------
 def paso1_regimen(hechos: dict[str, Any]) -> dict[str, Any]:
-    q = _query_base(hechos) + " régimen de responsabilidad culpa probada presunta " \
-        "actividad peligrosa artículo 2341 2356 carga de la prueba"
-    chunks = recuperar(q, ["jurisprudencia", "doctrina", "ley"], hechos)
+    q = _query_base(hechos) + (
+        " régimen de responsabilidad civil · culpa probada art 2341 · culpa presunta · "
+        "actividad peligrosa art 2356 · responsabilidad médica lex artis · producto defectuoso "
+        "Ley 1480 · seguro SOAT · carga de la prueba art 167 · presunción y causa extraña"
+    )
+    chunks = recuperar(q, ["jurisprudencia", "doctrina", "ley"], hechos, n_prio=4)
     system = (
-        "Eres un abogado litigante experto en responsabilidad civil extracontractual "
-        "en Colombia, del lado de la DEFENSA (demandado). Clasificas el régimen de "
-        "responsabilidad y su normativa."
+        "Eres un abogado litigante experto en responsabilidad civil extracontractual en "
+        "Colombia, del lado de la DEFENSA (demandado). Determinas el RÉGIMEN de responsabilidad, "
+        "que es la decisión que GOBIERNA todo el análisis (define qué debe probar cada parte).\n\n"
+        + _PRINCIPIOS + "\n\n"
+        "REGLA DE CONFLICTO: si el caso admite dos regímenes, NO elijas dogmáticamente. Presenta "
+        "el principal y el alternativo (el que podría alegar la contraparte o el juez) y marca "
+        "`clasificacion_contestable`. El actor suele enmarcar como actividad peligrosa (2356) para "
+        "invertir la carga; la defensa puede argumentar culpa probada (2341) para dejar la carga "
+        "en el actor.\n\n"
+        "OJO con el SEGURO/SOAT: NO es el régimen de responsabilidad del demandado, es una CAPA DE "
+        "COBERTURA aparte. En un accidente de tránsito el régimen es 'actividad_peligrosa' (2356) "
+        "AUNQUE exista SOAT o una aseguradora demandada; la aseguradora se maneja por llamamiento "
+        "en garantía, no cambia el régimen. Usa 'seguro_soat' SOLO si la disputa es exclusivamente "
+        "sobre cobertura, amparos o exclusiones de la póliza."
     )
     instruccion = (
-        "Determina el RÉGIMEN de responsabilidad y devuelve este JSON:\n"
+        "Determina el RÉGIMEN y devuelve este JSON (campos de la sección 2.1 del estándar):\n"
         "{\n"
-        '  "regimen": "subjetiva_culpa_probada | subjetiva_culpa_presunta | '
-        'objetiva_actividad_peligrosa | objetiva_producto | medica | otro",\n'
-        '  "explicacion": "por qué encuadra ahí, en 2-4 frases",\n'
-        '  "normativa_aplicable": [{"norma":"ej. Art. 2356 CC","citas":["J1"]}],\n'
+        '  "regimen": "subjetiva_culpa_probada | subjetiva_culpa_presunta | actividad_peligrosa | '
+        'objetiva_producto | medica | seguro_soat | otro",\n'
+        '  "etiqueta_legible": "nombre del régimen en lenguaje natural",\n'
+        '  "nivel_confianza": "alto | medio | bajo",\n'
+        '  "fundamento_factico": "hechos del expediente que justifican este régimen",\n'
+        '  "fundamento_juridico": [{"norma":"ej. C.C. art. 2356","citas":["L1","J2"]}],\n'
         '  "carga_de_la_prueba": "a quién corresponde y qué implica para la defensa",\n'
-        '  "diligencia_exonera": true/false,\n'
-        '  "clasificacion_contestable": true/false,\n'
-        '  "estrategia_reclasificacion": "si la defensa puede reencuadrar el régimen '
-        'para mover la carga al demandante (p.ej. defender 2341 frente a 2356), '
-        'explícalo; si no, null",\n'
-        '  "citas": ["J1","L2"]\n'
+        '  "diligencia_exonera": true,\n'
+        '  "regimen_alternativo": "otro régimen que podría alegar la contraparte o el juez (o null)",\n'
+        '  "por_que_no_otro_regimen": "descarte razonado de los regímenes que no aplican",\n'
+        '  "clasificacion_contestable": true,\n'
+        '  "estrategia_reclasificacion": "si la defensa puede reencuadrar el régimen para mover la '
+        'carga (p.ej. 2341 frente a 2356), explícalo; si no, null",\n'
+        '  "consecuencia_probatoria": "qué DEBE probar el demandante y qué debe controvertir el '
+        'demandado bajo este régimen",\n'
+        '  "citas": ["L1","J2","D1"]\n'
         "}"
     )
     out = _ejecutar_paso(system, instruccion, hechos, chunks)
@@ -331,8 +363,10 @@ def paso5_memo(hechos: dict[str, Any], p1, p2, p3, p4,
                registro: dict[str, dict[str, Any]]) -> dict[str, Any]:
     system = (
         "Eres un abogado senior de RCE en Colombia. Redactas un memorando interno de "
-        "ESTRATEGIA DEFENSIVA para el equipo, integrando el análisis previo. Ordenas los "
-        "argumentos por SOLIDEZ jurídica y eres honesto sobre debilidades."
+        "ESTRATEGIA DEFENSIVA para el equipo, integrando el análisis previo. El memorando "
+        "ABRE con el régimen de responsabilidad (define cómo se lee todo lo demás), y luego "
+        "ordena los argumentos por SOLIDEZ jurídica. Eres honesto sobre debilidades.\n\n"
+        + _PRINCIPIOS
     )
     insumo = {
         "regimen": {k: v for k, v in p1.items() if k != "_chunks"},
@@ -347,7 +381,7 @@ def paso5_memo(hechos: dict[str, Any], p1, p2, p3, p4,
         f"Etiquetas de cita válidas (usa solo estas): {etiquetas_validas}\n\n"
         "Redacta el memorando y devuelve este JSON:\n"
         "{\n"
-        '  "sintesis_estrategia":"3-5 frases con la tesis defensiva central",\n'
+        '  "sintesis_estrategia":"3-5 frases con la tesis defensiva central; DEBE empezar nombrando el régimen de responsabilidad aplicable",\n'
         '  "argumentos":[\n'
         '    {"tesis":"enunciado del argumento",\n'
         '     "solidez":"SOLIDO | PROBABLE | DEBIL",\n'
@@ -381,15 +415,49 @@ def _cita_str(labels: list[str], registro: dict[str, dict[str, Any]]) -> str:
     return "  \n".join(vistos)
 
 
-def render_memo_markdown(memo: dict[str, Any], registro: dict[str, dict[str, Any]]) -> str:
+def _render_regimen(reg: dict[str, Any], registro: dict[str, dict[str, Any]]) -> list[str]:
+    """Sección prominente del régimen (criterio #1 de evaluación)."""
+    if not reg or "error" in reg:
+        return []
+    nombre = reg.get("etiqueta_legible") or reg.get("regimen") or "no determinado"
+    L = ["## 1. Régimen de responsabilidad", ""]
+    conf = reg.get("nivel_confianza")
+    L.append(f"**Régimen aplicable:** {nombre}" + (f"  ·  confianza: {conf}" if conf else ""))
+    if reg.get("carga_de_la_prueba"):
+        L.append(f"**Carga de la prueba:** {reg['carga_de_la_prueba']}")
+    if reg.get("diligencia_exonera") is not None:
+        L.append(f"**¿La diligencia exonera?:** {'Sí' if reg['diligencia_exonera'] else 'No (solo causa extraña)'}")
+    if reg.get("clasificacion_contestable") and reg.get("regimen_alternativo"):
+        L.append(f"**⚠️ Clasificación contestable** — régimen alternativo: {reg['regimen_alternativo']}.")
+        if reg.get("estrategia_reclasificacion"):
+            L.append(f"**Estrategia de reclasificación:** {reg['estrategia_reclasificacion']}")
+    if reg.get("consecuencia_probatoria"):
+        L.append(f"**Consecuencia probatoria:** {reg['consecuencia_probatoria']}")
+    # Fundamento jurídico con citas expandidas (deduplicadas, en orden)
+    fj_labels: list[str] = list(reg.get("citas", []))
+    for fj in reg.get("fundamento_juridico", []):
+        fj_labels += fj.get("citas", [])
+    fj_labels = list(dict.fromkeys(fj_labels))
+    cs = _cita_str(fj_labels, registro)
+    if cs:
+        L += ["", "**Fundamento jurídico:**  ", cs]
+    L.append("")
+    return L
+
+
+def render_memo_markdown(memo: dict[str, Any], registro: dict[str, dict[str, Any]],
+                         regimen: dict[str, Any] | None = None) -> str:
     L = ["# Memorando de estrategia defensiva", "", f"> {_DISCLAIMER}", ""]
     if memo.get("sintesis_estrategia"):
         L += ["## Síntesis", memo["sintesis_estrategia"], ""]
 
+    # Régimen primero — es el criterio que más pesa y gobierna todo el análisis.
+    L += _render_regimen(regimen or {}, registro)
+
     args = sorted(memo.get("argumentos", []),
                   key=lambda a: _ORDEN.get(str(a.get("solidez", "DEBIL")).upper(), 3))
     if args:
-        L += ["## Argumentos (ordenados por solidez)", ""]
+        L += ["## 2. Argumentos defensivos (ordenados por solidez)", ""]
         for i, a in enumerate(args, 1):
             L.append(f"### {i}. [{a.get('solidez','?')}] {a.get('tesis','')}")
             if a.get("desarrollo"):
@@ -407,6 +475,10 @@ def render_memo_markdown(memo: dict[str, Any], registro: dict[str, dict[str, Any
         L += ["## Advertencias"] + [f"- {a}" for a in memo["advertencias"]] + [""]
 
     usadas = {lab for a in args for lab in (a.get("citas") or [])}
+    if regimen:
+        usadas |= set(regimen.get("citas", []))
+        for fj in regimen.get("fundamento_juridico", []):
+            usadas |= set(fj.get("citas", []))
     if usadas:
         L += ["## Fuentes citadas"]
         for lab in sorted(usadas):
@@ -433,9 +505,8 @@ def construir_memo(hechos: dict[str, Any]) -> dict[str, Any]:
         registro.update(_registro_citas(paso.get("_chunks", [])))
 
     memo = paso5_memo(hechos, p1, p2, p3, p4, registro)
-    memo_md = render_memo_markdown(memo, registro)
-
     limpio = lambda p: {k: v for k, v in p.items() if k != "_chunks"}
+    memo_md = render_memo_markdown(memo, registro, regimen=limpio(p1))
     return {
         "regimen": limpio(p1),
         "exoneracion": limpio(p2),

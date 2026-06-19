@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MODEL = os.environ.get("COMPREHENSION_MODEL", "gemini-2.5-flash")
-MAX_TOKENS = 8192
+MAX_TOKENS = 16384   # demandas reales extensas: muchos hechos/daños/pruebas
 
 SYSTEM = """Eres un asistente jurídico experto en responsabilidad civil
 extracontractual en Colombia. Recibes la evidencia de una demanda (texto,
@@ -130,15 +130,17 @@ def extraer_hechos(blocks: list[dict[str, Any]]) -> dict[str, Any]:
     """Llama a Gemini con los bloques multimodales y devuelve los hechos."""
     client = _get_client()
     parts = _blocks_to_parts(blocks) + [INSTRUCCION]
+    cfg: dict[str, Any] = dict(system_instruction=SYSTEM, max_output_tokens=MAX_TOKENS)
+    # Desactivar "thinking" de gemini-2.5: si no, consume el presupuesto de salida
+    # y trunca el JSON en demandas extensas (con muchos hechos/daños/pruebas).
+    try:
+        cfg["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    except Exception:
+        pass
     response = client.models.generate_content(
-        model=MODEL,
-        contents=parts,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM,
-            max_output_tokens=MAX_TOKENS,
-        ),
+        model=MODEL, contents=parts, config=types.GenerateContentConfig(**cfg)
     )
-    raw = response.text
+    raw = response.text or ""
     try:
         return _parse_json(raw)
     except Exception as e:

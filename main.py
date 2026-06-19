@@ -21,8 +21,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import Body, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from ingest import normalize_many
 from comprehension import extraer_hechos
@@ -83,6 +84,29 @@ def rag_status() -> dict[str, Any]:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# --- Descarga de PDFs --------------------------------------------------------
+@app.post("/pdf/hechos")
+def pdf_hechos_endpoint(hechos: dict[str, Any] = Body(...)) -> Response:
+    """Genera la Ficha del caso (croquis) en PDF a partir del objeto `hechos`."""
+    from documents import pdf_hechos
+    data = pdf_hechos(hechos)
+    return Response(
+        content=data, media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="ficha_caso.pdf"'},
+    )
+
+
+@app.post("/pdf/memo")
+def pdf_memo_endpoint(analisis: dict[str, Any] = Body(...)) -> Response:
+    """Genera el Memorando de estrategia en PDF a partir del objeto `analisis`."""
+    from documents import pdf_memo
+    data = pdf_memo(analisis)
+    return Response(
+        content=data, media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="memorando.pdf"'},
+    )
 
 
 CATEGORIAS = ("demanda", "pruebas", "anexos", "poderes")

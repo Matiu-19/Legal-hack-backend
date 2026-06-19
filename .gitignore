@@ -27,6 +27,12 @@ __pycache__/
 *.tmp
 rce_*/
 
+# Artefactos de prueba generados localmente
+ficha_caso.pdf
+memorando.pdf
+hechos_*.json
+memo_*.json
+
 # IDEs
 .vscode/
 .idea/
