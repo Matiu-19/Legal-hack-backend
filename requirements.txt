@@ -7,7 +7,6 @@ python-dotenv>=1.0
 pymupdf>=1.23
 chromadb>=0.5
 playwright>=1.40
-fpdf2>=2.8
 # OCR de PDFs escaneados (job de indexación offline):
 pytesseract>=0.3.10
 pillow>=10.0
